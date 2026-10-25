@@ -5,6 +5,46 @@ const path=require('node:path');
 const loadMaps=require('./map-data.cjs');
 const root=path.join(__dirname,'..','web');
 const maps=loadMaps(root);
+const vm=require('node:vm');
+const appSource=fs.readFileSync(path.join(root,'app.js'),'utf8');
+function routeArrowTransforms(route,stops=[]){
+ const arrows=[];
+ const context=vm.createContext({
+  route,stops,activeFloor:{id:'main'},activeMap:{},
+  stopFloor:()=> 'main',floors:()=>[{id:'main'}],
+  routeArrows:{replaceChildren:()=>{arrows.length=0}},
+  node:(_tag,attrs)=>{const attributes={...attrs};arrows.push(attributes);return{
+   setAttribute:(key,value)=>{attributes[key]=value},getAttribute:key=>attributes[key]
+  }}
+ });
+ const renderer=appSource.slice(appSource.indexOf('function renderRouteArrows('),appSource.indexOf('\nfunction setRouteDesign('));
+ const formatter=appSource.match(/function formatCoord\(value\)\{[^\n]+\}/)[0];
+ // A synchronous infinite loop must fail within the VM deadline, not hang the test runner.
+ vm.runInContext(`${formatter}\n${renderer}\nrenderRouteArrows(route)`,context,{timeout:1000});
+ assert.equal(arrows.length%2,0);
+ for(let i=0;i<arrows.length;i+=2){
+  assert.equal(arrows[i].class,'route-arrow-shadow');assert.equal(arrows[i+1].class,'route-arrow');
+  assert.equal(arrows[i].transform,arrows[i+1].transform);
+ }
+ return arrows.filter(arrow=>arrow.class==='route-arrow').map(arrow=>arrow.transform);
+}
+test('route arrows terminate on long segments and include exact spacing boundaries',()=>{
+ assert.deepEqual(routeArrowTransforms('M0 0 L264 0'),[
+  'translate(88 0) rotate(0)','translate(176 0) rotate(0)','translate(264 0) rotate(0)'
+ ]);
+});
+test('route arrows carry spacing across short segments and bends, resetting at new strokes',()=>{
+ assert.deepEqual(routeArrowTransforms('M0 0 L50 0 L100 0 L100 200 M300 0 L350 0 L400 0'),[
+  'translate(88 0) rotate(0)','translate(100 76) rotate(90)',
+  'translate(100 164) rotate(90)','translate(388 0) rotate(0)'
+ ]);
+});
+test('route arrow suppression preserves spacing and empty or degenerate routes terminate',()=>{
+ assert.deepEqual(routeArrowTransforms('M0 0 L264 0',[[88,0]]),[
+  'translate(176 0) rotate(0)','translate(264 0) rotate(0)'
+ ]);
+ for(const route of ['', 'M0 0', 'M0 0 L0 0 L40 0'])assert.deepEqual(routeArrowTransforms(route),[]);
+});
 test('nine distinct dungeon routes and valid local artwork',()=>{
  assert.equal(maps.length,9);assert.equal(new Set(maps.map(m=>m.id)).size,maps.length);
  for(const id of ['scholomance','dire-maul-east','dire-maul-north','dire-maul-west','lower-blackrock-spire','upper-blackrock-spire','blackrock-depths'])assert.ok(maps.some(m=>m.id===id));
