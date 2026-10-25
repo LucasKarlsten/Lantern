@@ -41,7 +41,7 @@ function renderRouteArrows(route){
     for(let i=1;i<path.length;i++){
       const a=path[i-1],b=path[i],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);if(length<1)continue;
       let travelled=0;
-      while(travelled+length>=untilNext){travelled+=untilNext;const t=travelled/length,x=a[0]+dx*t,y=a[1]+dy*t;
+      while(length-travelled>=untilNext){travelled+=untilNext;const t=travelled/length,x=a[0]+dx*t,y=a[1]+dy*t;
         if(!avoid.some(([px,py])=>Math.hypot(px-x,py-y)<34)){
           const arrow=node('path',{d:'M-5 -4 L0 0 L-5 4',class:'route-arrow-shadow'},routeArrows);
           arrow.setAttribute('transform',`translate(${formatCoord(x)} ${formatCoord(y)}) rotate(${formatCoord(Math.atan2(dy,dx)*180/Math.PI)})`);
